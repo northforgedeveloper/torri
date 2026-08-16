@@ -170,34 +170,53 @@
   <div id="message" class="message"></div>
 </div>
 
-<script>
+<!-- Usa type="module" per permettere l'import di Firebase -->
+<script type="module">
+  // 1. Importa Firebase
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+  // 2. Configurazione del tuo database
+  const firebaseConfig = {
+    apiKey: "AIzaSyBXxjhMw5GansAGECnLb2h2Q4MJ033jQ8s",
+    authDomain: "torri-b8f46.firebaseapp.com",
+    projectId: "torri-b8f46",
+    storageBucket: "torri-b8f46.firebasestorage.app",
+    messagingSenderId: "775862907948",
+    appId: "1:775862907948:web:344b59d249946691204d89",
+    databaseURL: "https://torri-b8f46-default-rtdb.europe-west1.firebasedatabase.app"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const database = getDatabase(app);
+
+  // Variabili della tua app
   const TOTAL_CIRCLES = 24;
-  const START_HOUR = 10; // 10:00
-  const STORAGE_KEY = "pauseCounterState";
+  const START_HOUR = 10;
+  let sequence = []; 
 
-  let sequence = []; // array ordinato di 'green' | 'orange', nell'ordine in cui li aggiungi
+  // 3. Funzione per salvare su Firebase (sostituisce localStorage)
+  function saveState() {
+    set(ref(database, 'statoTorri'), sequence);
+  }
 
-  // --- Persistenza (localStorage: sopravvive al refresh della pagina) ---
-  function loadState() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      if (saved && Array.isArray(saved.sequence)) {
-        sequence = saved.sequence;
-      }
-    } catch (e) {
+  // 4. In ascolto di Firebase: se qualcuno cambia i dati, aggiorna lo schermo
+  const statoRef = ref(database, 'statoTorri');
+  onValue(statoRef, (snapshot) => {
+    const datiOnline = snapshot.val();
+    
+    // Se ci sono dati online, usali, altrimenti array vuoto
+    if (datiOnline) {
+      sequence = datiOnline;
+    } else {
       sequence = [];
     }
-  }
+    
+    // Ridisegna la grafica con i nuovi dati appena ricevuti
+    render();
+  });
 
-  function saveState() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ sequence }));
-    } catch (e) {
-      console.error("Errore salvataggio stato", e);
-    }
-  }
-
-  // Quante mezz'ore sono passate dalle 10:00 di oggi (0-24)
+  // Calcolo ore automatico
   function getAutoCount() {
     const now = new Date();
     const start = new Date();
@@ -209,10 +228,17 @@
     return Math.max(0, Math.min(TOTAL_CIRCLES, halfHours));
   }
 
+  // Ridisegna l'interfaccia
   function render() {
     const autoCount = getAutoCount();
     const container = document.getElementById("circles");
     container.innerHTML = "";
+    
+    // Assicurati che sequence sia un array (serve per Firebase)
+    if (!Array.isArray(sequence)) {
+        sequence = Object.values(sequence);
+    }
+    
     const completed = sequence.filter(x => x === "green").length;
 
     for (let i = 0; i < TOTAL_CIRCLES; i++) {
@@ -233,33 +259,7 @@
     updateMessage(completed);
   }
 
-  function addOne() {
-    if (sequence.length >= TOTAL_CIRCLES) return;
-    sequence.push("green");
-    render();
-    saveState();
-  }
-
-  function removeOne() {
-    if (sequence.length === 0) return;
-    sequence.pop(); // annulla l'ultima azione, verde o arancione che sia
-    render();
-    saveState();
-  }
-
-  function addWorkout() {
-    if (sequence.length >= TOTAL_CIRCLES) return;
-    sequence.push("orange");
-    render();
-    saveState();
-  }
-
-  function resetAll() {
-    sequence = [];
-    render();
-    saveState();
-  }
-
+  // Messaggio finale
   function updateMessage(completed) {
     const message = document.getElementById("message");
 
@@ -272,9 +272,34 @@
     }
   }
 
-  loadState();
-  render();
-  setInterval(render, 60000); // ricalcola il grigio ogni minuto
+  // 5. Esponiamo le funzioni all'oggetto "window" 
+  // Così i pulsanti HTML (onclick="...") possono trovarle ed eseguirle
+  window.addOne = function() {
+    if (sequence.length >= TOTAL_CIRCLES) return;
+    sequence.push("green");
+    saveState(); // Salva online
+  }
+
+  window.removeOne = function() {
+    if (sequence.length === 0) return;
+    sequence.pop();
+    saveState(); // Salva online
+  }
+
+  window.addWorkout = function() {
+    if (sequence.length >= TOTAL_CIRCLES) return;
+    sequence.push("orange");
+    saveState(); // Salva online
+  }
+
+  window.resetAll = function() {
+    sequence = [];
+    saveState(); // Salva online (svuotandolo)
+  }
+
+  // Timer per i cerchi grigi
+  setInterval(render, 60000); 
+
 </script>
 </body>
 </html>
