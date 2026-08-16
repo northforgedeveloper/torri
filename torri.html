@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pause Counter</title>
+<style>
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f5f5f7;
+    color: #1d1d1f;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 30px;
+  }
+
+  .app {
+    width: 100%;
+    max-width: 700px;
+    background: white;
+    border-radius: 28px;
+    padding: 35px;
+    box-shadow: 0 15px 50px rgba(0,0,0,0.08);
+  }
+
+  h1 {
+    text-align: center;
+    margin: 0 0 8px;
+    font-size: 32px;
+  }
+
+  .subtitle {
+    text-align: center;
+    color: #777;
+    margin-bottom: 30px;
+  }
+
+  .counter {
+    text-align: center;
+    margin-bottom: 25px;
+  }
+
+  #completed {
+    font-size: 64px;
+    font-weight: 700;
+    color: #1d1d1f;
+  }
+
+  .counter span.separator, #total {
+    color: #777;
+    font-size: 30px;
+    font-weight: 400;
+  }
+
+  .circles {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 15px;
+    justify-items: center;
+    margin: 30px 0;
+  }
+
+  .circle {
+    width: 65px;
+    height: 65px;
+    border-radius: 50%;
+    border: 4px solid #d2d2d7;
+    background: white;
+    transition: 0.15s ease;
+  }
+
+  .circle.auto {
+    background: #ececee;
+    border-color: #ececee;
+  }
+
+  .circle.done {
+    background: #34c759;
+    border-color: #34c759;
+  }
+
+  .circle.workout {
+    background: #ff9500;
+    border-color: #ff9500;
+  }
+
+  .controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin-top: 25px;
+    flex-wrap: wrap;
+  }
+
+  button {
+    border: none;
+    border-radius: 14px;
+    padding: 13px 22px;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+    background: #e9e9ed;
+    transition: 0.15s ease;
+  }
+
+  button:hover {
+    transform: translateY(-1px);
+    background: #dedee3;
+  }
+
+  .add, .remove, .workout-btn {
+    color: white;
+    font-size: 24px;
+    width: 55px;
+    height: 50px;
+    padding: 0;
+  }
+
+  .add { background: #34c759; }
+  .remove { background: #ff3b30; }
+  .workout-btn { background: #ff9500; margin-left: 10px; }
+
+  .reset {
+    margin-left: 10px;
+  }
+
+  .message {
+    text-align: center;
+    margin-top: 25px;
+    font-size: 18px;
+    font-weight: 600;
+    min-height: 25px;
+  }
+
+  @media (max-width: 600px) {
+    .app { padding: 25px 18px; }
+    .circles { grid-template-columns: repeat(4, 1fr); }
+    .circle { width: 58px; height: 58px; }
+    #completed { font-size: 52px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <h1>Pause Counter</h1>
+  <div class="subtitle">Alzati dalla sedia e completa un cerchio</div>
+
+  <div class="counter">
+    <span id="completed">0</span>
+    <span class="separator">/</span>
+    <span id="total">24</span>
+  </div>
+
+  <div id="circles" class="circles"></div>
+
+  <div class="controls">
+    <button class="remove" onclick="removeOne()">−</button>
+    <button class="add" onclick="addOne()">+</button>
+    <button class="reset" onclick="resetAll()">Reset</button>
+    <button class="workout-btn" onclick="addWorkout()">+</button>
+  </div>
+
+  <div id="message" class="message"></div>
+</div>
+
+<script>
+  const TOTAL_CIRCLES = 24;
+  const START_HOUR = 10; // 10:00
+  const STORAGE_KEY = "pauseCounterState";
+
+  let sequence = []; // array ordinato di 'green' | 'orange', nell'ordine in cui li aggiungi
+
+  // --- Persistenza (localStorage: sopravvive al refresh della pagina) ---
+  function loadState() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (saved && Array.isArray(saved.sequence)) {
+        sequence = saved.sequence;
+      }
+    } catch (e) {
+      sequence = [];
+    }
+  }
+
+  function saveState() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ sequence }));
+    } catch (e) {
+      console.error("Errore salvataggio stato", e);
+    }
+  }
+
+  // Quante mezz'ore sono passate dalle 10:00 di oggi (0-24)
+  function getAutoCount() {
+    const now = new Date();
+    const start = new Date();
+    start.setHours(START_HOUR, 0, 0, 0);
+
+    const diffMinutes = (now - start) / 60000;
+    const halfHours = Math.floor(diffMinutes / 30);
+
+    return Math.max(0, Math.min(TOTAL_CIRCLES, halfHours));
+  }
+
+  function render() {
+    const autoCount = getAutoCount();
+    const container = document.getElementById("circles");
+    container.innerHTML = "";
+    const completed = sequence.filter(x => x === "green").length;
+
+    for (let i = 0; i < TOTAL_CIRCLES; i++) {
+      const circle = document.createElement("div");
+      let cls = "circle";
+
+      if (i < sequence.length) {
+        cls += sequence[i] === "green" ? " done" : " workout";
+      } else if (i < autoCount) {
+        cls += " auto";
+      }
+
+      circle.className = cls;
+      container.appendChild(circle);
+    }
+
+    document.getElementById("completed").textContent = completed;
+    updateMessage(completed);
+  }
+
+  function addOne() {
+    if (sequence.length >= TOTAL_CIRCLES) return;
+    sequence.push("green");
+    render();
+    saveState();
+  }
+
+  function removeOne() {
+    if (sequence.length === 0) return;
+    sequence.pop(); // annulla l'ultima azione, verde o arancione che sia
+    render();
+    saveState();
+  }
+
+  function addWorkout() {
+    if (sequence.length >= TOTAL_CIRCLES) return;
+    sequence.push("orange");
+    render();
+    saveState();
+  }
+
+  function resetAll() {
+    sequence = [];
+    render();
+    saveState();
+  }
+
+  function updateMessage(completed) {
+    const message = document.getElementById("message");
+
+    if (completed === 0) {
+      message.textContent = "Inizia la giornata.";
+    } else if (completed === TOTAL_CIRCLES) {
+      message.textContent = "🎉 Obiettivo completato!";
+    } else {
+      message.textContent = `Ancora ${TOTAL_CIRCLES - completed} pause.`;
+    }
+  }
+
+  loadState();
+  render();
+  setInterval(render, 60000); // ricalcola il grigio ogni minuto
+</script>
+</body>
+</html>
